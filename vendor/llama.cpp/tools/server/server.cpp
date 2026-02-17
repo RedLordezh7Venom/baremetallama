@@ -1,10 +1,12 @@
 #include "arg.h"
 #include "common.h"
+#include "console.h"
 #include "llama.h"
 #include "log.h"
 #include "server-context.h"
 #include "server-http.h"
 #include "server-models.h"
+#include "server-task.h"
 
 #include <signal.h>
 
@@ -19,14 +21,17 @@
 static std::function<void(int)> shutdown_handler;
 static std::atomic_flag         is_terminating = ATOMIC_FLAG_INIT;
 
+static std::atomic<bool> g_is_interrupted = false;
+
 static inline void signal_handler(int signal) {
     if (is_terminating.test_and_set()) {
         // in case it hangs, we can force terminate the server by hitting Ctrl+C twice
         // this is for better developer experience, we can remove when the server is stable enough
-        fprintf(stderr, "Received second interrupt, terminating immediately.\n");
+        fprintf(stderr, "\033[0m\nReceived second interrupt, terminating immediately.\n");
         exit(1);
     }
 
+    g_is_interrupted.store(true);
     shutdown_handler(signal);
 }
 
@@ -68,6 +73,188 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t 
     };
 }
 
+//
+// TUI (Terminal UI) logic
+//
+
+struct cli_context {
+    server_context &        ctx_server;
+    json                    messages = json::array();
+    std::vector<raw_buffer> input_files;
+    task_params             defaults;
+    bool                    verbose_prompt;
+
+    cli_context(const common_params & params, server_context & ctx) : ctx_server(ctx) {
+        defaults.sampling    = params.sampling;
+        defaults.speculative = params.speculative;
+        defaults.n_keep      = params.n_keep;
+        defaults.n_predict   = params.n_predict;
+        defaults.antiprompt  = params.antiprompt;
+
+        defaults.stream            = true;
+        defaults.timings_per_token = true;
+        verbose_prompt             = params.verbose_prompt;
+    }
+
+    std::string generate_completion(result_timings & out_timings) {
+        server_response_reader rd          = ctx_server.get_response_reader();
+        auto                   chat_params = format_chat();
+        {
+            server_task task = server_task(SERVER_TASK_TYPE_COMPLETION);
+            task.id          = rd.get_new_id();
+            task.index       = 0;
+            task.params      = defaults;
+            task.cli_prompt  = chat_params.prompt;
+            task.cli_files   = input_files;
+            task.cli         = true;
+
+            task.params.chat_parser_params                  = common_chat_parser_params(chat_params);
+            task.params.chat_parser_params.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+            if (!chat_params.parser.empty()) {
+                task.params.chat_parser_params.parser.load(chat_params.parser);
+            }
+
+            rd.post_task({ std::move(task) });
+        }
+
+        console::spinner::start();
+        auto should_stop = []() {
+            return g_is_interrupted.load();
+        };
+        server_task_result_ptr result = rd.next(should_stop);
+
+        console::spinner::stop();
+        std::string curr_content;
+        bool        is_thinking = false;
+
+        while (result) {
+            if (should_stop()) {
+                break;
+            }
+            if (result->is_error()) {
+                json err_data = result->to_json();
+                console::error("Error: %s\n", err_data.at("message").get<std::string>().c_str());
+                return curr_content;
+            }
+            auto * res_partial = dynamic_cast<server_task_result_cmpl_partial *>(result.get());
+            if (res_partial) {
+                out_timings = res_partial->timings;
+                for (const auto & diff : res_partial->oaicompat_msg_diffs) {
+                    if (!diff.content_delta.empty()) {
+                        if (is_thinking) {
+                            console::log("\n[End thinking]\n\n");
+                            console::set_display(DISPLAY_TYPE_RESET);
+                            is_thinking = false;
+                        }
+                        curr_content += diff.content_delta;
+                        console::log("%s", diff.content_delta.c_str());
+                        console::flush();
+                    }
+                    if (!diff.reasoning_content_delta.empty()) {
+                        console::set_display(DISPLAY_TYPE_REASONING);
+                        if (!is_thinking) {
+                            console::log("[Start thinking]\n");
+                        }
+                        is_thinking = true;
+                        console::log("%s", diff.reasoning_content_delta.c_str());
+                        console::flush();
+                    }
+                }
+            }
+            auto * res_final = dynamic_cast<server_task_result_cmpl_final *>(result.get());
+            if (res_final) {
+                out_timings = res_final->timings;
+                break;
+            }
+            result = rd.next(should_stop);
+        }
+        g_is_interrupted.store(false);
+        return curr_content;
+    }
+
+    common_chat_params format_chat() {
+        auto                         meta        = ctx_server.get_meta();
+        auto &                       chat_params = meta.chat_params;
+        common_chat_templates_inputs inputs;
+        inputs.messages              = common_chat_msgs_parse_oaicompat(messages);
+        inputs.use_jinja             = chat_params.use_jinja;
+        inputs.add_generation_prompt = true;
+        inputs.enable_thinking       = chat_params.enable_thinking;
+        return common_chat_templates_apply(chat_params.tmpls.get(), inputs);
+    }
+};
+
+const char * LLAMA_ASCII_LOGO = R"(
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+)";
+
+static void run_tui(common_params & params, server_context & ctx_server) {
+    cli_context ctx_cli(params, ctx_server);
+    console::init(params.simple_io, params.use_color);
+
+    // Start background inference loop
+    std::thread inference_thread([&ctx_server]() { ctx_server.start_loop(); });
+
+    auto inf = ctx_server.get_meta();
+    console::log("\n%s\n", LLAMA_ASCII_LOGO);
+    console::log("build      : %s\n", inf.build_info.c_str());
+    console::log("model      : %s\n", inf.model_name.c_str());
+    console::log("\nType /exit or Ctrl+C to quit.\n\n");
+
+    std::string cur_msg;
+    while (true) {
+        std::string buffer;
+        console::set_display(DISPLAY_TYPE_USER_INPUT);
+        console::log("> ");
+        std::string line;
+        bool        another_line = console::readline(line, params.multiline_input);
+        buffer += line;
+        while (another_line) {
+            another_line = console::readline(line, params.multiline_input);
+            buffer += line;
+        }
+        console::set_display(DISPLAY_TYPE_RESET);
+
+        if (g_is_interrupted.load()) {
+            g_is_interrupted.store(false);
+            break;
+        }
+        if (buffer.empty()) {
+            continue;
+        }
+        if (buffer == "/exit") {
+            break;
+        }
+        if (buffer == "/clear") {
+            ctx_cli.messages.clear();
+            console::log("History cleared.\n");
+            continue;
+        }
+
+        ctx_cli.messages.push_back({
+            { "role",    "user" },
+            { "content", buffer }
+        });
+        result_timings timings;
+        std::string    assistant_content = ctx_cli.generate_completion(timings);
+        ctx_cli.messages.push_back({
+            { "role",    "assistant"       },
+            { "content", assistant_content }
+        });
+        console::log("\n");
+    }
+
+    ctx_server.terminate();
+    inference_thread.join();
+    console::cleanup();
+}
+
 int main(int argc, char ** argv) {
     // own arguments required by this example
     common_params params;
@@ -77,8 +264,8 @@ int main(int argc, char ** argv) {
     }
 
     // Bundle detection
-    if (params.model.path.empty() ||
-        params.model.path == "models/7B/ggml-model-f16.gguf" /* default value if not provided? */) {
+    bool is_bundle = false;
+    if (params.model.path.empty() || params.model.path == "models/7B/ggml-model-f16.gguf") {
         // Try to detect self-bundle
 #pragma pack(push, 1)
 
@@ -100,11 +287,14 @@ int main(int argc, char ** argv) {
                     LOG_INF("%s: Bundled model detected at offset %zu\n", __func__, (size_t) footer.offset);
                     params.model.path   = exe_path;
                     params.model.offset = (size_t) footer.offset;
+                    is_bundle           = true;
                 }
             }
             fclose(f);
         }
     }
+
+    bool tui_mode = (argc == 1 && is_bundle);
 
     // validate batch size for embeddings
     // embeddings require all tokens to be processed in a single ubatch
@@ -294,6 +484,12 @@ int main(int argc, char ** argv) {
         ctx_http.is_ready.store(true);
 
         LOG_INF("%s: model loaded\n", __func__);
+
+        if (tui_mode) {
+            run_tui(params, ctx_server);
+            clean_up();
+            return 0;
+        }
 
         shutdown_handler = [&](int) {
             // this will unblock start_loop()
