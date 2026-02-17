@@ -27,9 +27,3 @@ Run:
 
 if embedded GGUF exists → use it
 else → normal file path
-```
-gguf-bundler/
- ├─ bundler/        ← CLI tool that creates exe
- ├─ runtime/        ← modified llama.cpp server
- └─ examples/
-```
