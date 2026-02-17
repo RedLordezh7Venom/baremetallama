@@ -12,11 +12,13 @@
 #include <unistd.h>
 #endif
 
+#pragma pack(push, 1)
 struct BundleFooter {
   uint64_t offset;
   uint64_t size;
   uint32_t magic; // 0x47475546 (GGUF)
 };
+#pragma pack(pop)
 
 bool set_executable(const char *path) {
 #ifdef _WIN32
