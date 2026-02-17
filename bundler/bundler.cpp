@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
 
   // 1. Copy server
   output_file << server_file.rdbuf();
-  uint64_t model_offset = output_file.tellp();
+  uint64_t current_pos = output_file.tellp(); uint64_t model_offset = (current_pos + 4095) & ~4095; if (model_offset > current_pos) { std::vector<char> padding(model_offset - current_pos, 0); output_file.write(padding.data(), padding.size()); }
 
   // 2. Copy model
   output_file << model_file.rdbuf();
