@@ -8,7 +8,7 @@ First, ensure you have built the `bundler` and `llama-server`. Then, bundle a GG
 
 ```bash
 # Usage: ./bundler/bundler <SERVER_PATH> <MODEL_PATH> <OUTPUT_PATH>
-./bundler/bundler vendor/llama.cpp/build/bin/llama-server models/qwen2.5-0.5b-instruct-q4_k_m.gguf qwen-bundle
+./bundler/bundler vendor/llama.cpp/build/bin/llama-server models/qwen2.5-0.5b-instruct-q4_k_m.gguf qwen.baremetallama
 ```
 
 ## 2. Run the Bundled Executable
@@ -16,7 +16,7 @@ First, ensure you have built the `bundler` and `llama-server`. Then, bundle a GG
 Start the server. You don't need to specify the `-m` or `--model` flag because the executable automatically detects the bundled model inside itself.
 
 ```bash
-./qwen-bundle --host 127.0.0.1 --port 8080 --n-gpu-layers 0
+./qwen.baremetallama --host 127.0.0.1 --port 8080 --n-gpu-layers 0
 ```
 
 *The server will log: `main: Bundled model detected at offset ...`*

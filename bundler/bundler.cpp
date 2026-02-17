@@ -34,13 +34,18 @@ bool set_executable(const char *path) {
 int main(int argc, char *argv[]) {
   if (argc < 4) {
     std::cerr << "Usage: " << argv[0]
-              << " <server_exe> <model_gguf> <output_exe>" << std::endl;
+              << " <server_exe> <model_gguf> <output_file.baremetallama>"
+              << std::endl;
     return 1;
   }
 
   std::string server_path = argv[1];
   std::string model_path = argv[2];
   std::string output_path = argv[3];
+
+  if (output_path.find(".baremetallama") == std::string::npos) {
+    output_path += ".baremetallama";
+  }
 
   std::ifstream server_file(server_path, std::ios::binary);
   if (!server_file) {
@@ -63,7 +68,12 @@ int main(int argc, char *argv[]) {
 
   // 1. Copy server
   output_file << server_file.rdbuf();
-  uint64_t current_pos = output_file.tellp(); uint64_t model_offset = (current_pos + 4095) & ~4095; if (model_offset > current_pos) { std::vector<char> padding(model_offset - current_pos, 0); output_file.write(padding.data(), padding.size()); }
+  uint64_t current_pos = output_file.tellp();
+  uint64_t model_offset = (current_pos + 4095) & ~4095;
+  if (model_offset > current_pos) {
+    std::vector<char> padding(model_offset - current_pos, 0);
+    output_file.write(padding.data(), padding.size());
+  }
 
   // 2. Copy model
   output_file << model_file.rdbuf();
