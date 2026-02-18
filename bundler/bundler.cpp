@@ -34,9 +34,11 @@ const char *UNIVERSAL_HEADER =
     "esac\n"
     "TMPBIN=\"/tmp/baremetallama_${EXT}_$(date +%s)\"\n"
     "extract_and_run() {\n"
-    "  tail -c +$1 \"$0\" | head -c $2 > \"$TMPBIN\"\n"
+    "  OFF=$1; SIZ=$2; shift 2;\n"
+    "  tail -c +$OFF \"$0\" | head -c $SIZ > \"$TMPBIN\"\n"
     "  chmod +x \"$TMPBIN\"\n"
-    "  \"$TMPBIN\" --model \"$0\" --offset %3 \"$@\"\n"
+    "  env BAREMETALLAMA_SOURCE=\"$0\" BAREMETALLAMA_OFFSET=\"%3\" \"$TMPBIN\" "
+    "\"$@\"\n"
     "  EXIT_CODE=$?\n"
     "  rm -f \"$TMPBIN\"\n"
     "  exit $EXIT_CODE\n"
@@ -49,7 +51,9 @@ const char *UNIVERSAL_HEADER =
     "powershell -Command \"$f=[System.IO.File]::OpenRead('%~f0'); $f.Seek(%1, "
     "[System.IO.SeekOrigin]::Begin); $b=New-Object byte[] %2; $f.Read($b, 0, "
     "%2); [System.IO.File]::WriteAllBytes('%TMPBIN%', $b); $f.Close()\"\r\n"
-    "\"%TMPBIN%\" --model \"%~f0\" --offset %3 %*\r\n"
+    "set BAREMETALLAMA_SOURCE=%~f0\r\n"
+    "set BAREMETALLAMA_OFFSET=%3\r\n"
+    "\"%TMPBIN%\" %*\r\n"
     "del \"%TMPBIN%\"\r\n"
     "goto :EOF\r\n"
     "*/\n";
@@ -135,8 +139,11 @@ int main(int argc, char *argv[]) {
   if (p != std::string::npos)
     header_body.replace(p + 8, 2, s_size);
   p = header_body.find("# Extraction logic will be patched here");
-  if (p != std::string::npos)
-    header_body.replace(p, 39, "extract_and_run " + s_off + " " + s_size);
+  if (p != std::string::npos) {
+    size_t end_of_line = header_body.find("\n", p);
+    header_body.replace(p, end_of_line - p,
+                        "extract_and_run " + s_off + " " + s_size);
+  }
 
   p = header_body.find("Seek(%1");
   if (p != std::string::npos)

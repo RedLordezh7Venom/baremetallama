@@ -264,14 +264,23 @@ int main(int argc, char ** argv) {
     }
 
     // Bundle detection
-    bool is_bundle = false;
-    if (params.model.path.empty() || params.model.path == "models/7B/ggml-model-f16.gguf") {
+    bool         is_bundle  = false;
+    const char * env_source = std::getenv("BAREMETALLAMA_SOURCE");
+    const char * env_offset = std::getenv("BAREMETALLAMA_OFFSET");
+
+    if (env_source && env_offset) {
+        params.model.path   = env_source;
+        params.model.offset = (size_t) std::stoull(env_offset);
+        is_bundle           = true;
+        LOG_INF("%s: Bundled model detected via environment: %s (offset %zu)\n", __func__, env_source,
+                params.model.offset);
+    } else if (params.model.path.empty() || params.model.path == "models/7B/ggml-model-f16.gguf") {
         // Try to detect self-bundle
 #pragma pack(push, 1)
 
         struct BundleFooter {
-            uint64_t offset;
-            uint64_t size;
+            uint64_t model_offset;
+            uint64_t model_size;
             uint32_t magic;
         };
 
@@ -284,9 +293,9 @@ int main(int argc, char ** argv) {
             BundleFooter footer;
             if (fread(&footer, sizeof(footer), 1, f) == 1) {
                 if (footer.magic == 0x47475546) {
-                    LOG_INF("%s: Bundled model detected at offset %zu\n", __func__, (size_t) footer.offset);
+                    LOG_INF("%s: Bundled model detected at offset %zu\n", __func__, (size_t) footer.model_offset);
                     params.model.path   = exe_path;
-                    params.model.offset = (size_t) footer.offset;
+                    params.model.offset = (size_t) footer.model_offset;
                     is_bundle           = true;
                 }
             }
