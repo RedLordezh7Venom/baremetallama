@@ -24,7 +24,6 @@ struct BundleFooter {
 
 // Universal Polyglot Header (Shell + Batch)
 const char *UNIVERSAL_HEADER =
-    "#!/bin/sh\n"
     "MZqFpD='''\n"
     ":; # Unix Shell Logic\n"
     "case \"$(uname -s)\" in\n"
@@ -118,47 +117,55 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // Multiboot Header (for Bare Metal support)
+  // Write Shebang for Linux/Unix compatibility at 0 offset
+  output_file << "#!/bin/sh\n";
+
+  // Multiboot Header (for Bare Metal support) - must be in first 8KB
   uint32_t multiboot_header[] = {0x1BADB002, 0, (uint32_t)-(0x1BADB002 + 0)};
-
-  // Calculate offsets first
-  // 1. Multiboot (12 bytes)
-  // 2. Header (variable size)
-  // 3. Binary (padded to 4k)
-
-  std::string header = UNIVERSAL_HEADER;
   uint64_t multiboot_size = sizeof(multiboot_header);
-  uint64_t header_pos = multiboot_size;
-  uint64_t header_size = header.size();
-  uint64_t binary_offset = (header_pos + header_size + 4095) & ~4095;
+  output_file.write(reinterpret_cast<char *>(multiboot_header), multiboot_size);
 
-  // Patch header strings
+  // Write Universal Polyglot Header (Skip the first #!/bin/sh since we wrote
+  // it)
+  std::string header_body = UNIVERSAL_HEADER;
+  if (header_body.substr(0, 10) ==
+      "#!/bin/sh\n") { // This check is defensive, as we removed it from the
+                       // constant
+    header_body = header_body.substr(10);
+  }
+
+  // Update header pos calc
+  uint64_t shebang_size = 10; // "#!/bin/sh\n"
+  uint64_t current_pos_after_multiboot = shebang_size + multiboot_size;
+  uint64_t head_size = header_body.size();
+  uint64_t binary_offset =
+      (current_pos_after_multiboot + head_size + 4095) & ~4095;
+
+  // Patch headers... (same as before but on header_body)
   std::string s_off = std::to_string(binary_offset + 1);
   std::string s_size = std::to_string(server_size);
 
-  size_t p = header.find("tail -c +$1");
+  size_t p = header_body.find("tail -c +$1");
   if (p != std::string::npos)
-    header.replace(p + 9, 2, s_off);
-  p = header.find("head -c $2");
+    header_body.replace(p + 9, 2, s_off);
+  p = header_body.find("head -c $2");
   if (p != std::string::npos)
-    header.replace(p + 8, 2, s_size);
-  p = header.find("# Extraction logic will be patched here");
+    header_body.replace(p + 8, 2, s_size);
+  p = header_body.find("# Extraction logic will be patched here");
   if (p != std::string::npos)
-    header.replace(p, 39, "extract_and_run " + s_off + " " + s_size);
+    header_body.replace(p, 39, "extract_and_run " + s_off + " " + s_size);
 
-  p = header.find("Seek(%1");
+  p = header_body.find("Seek(%1");
   if (p != std::string::npos)
-    header.replace(p + 5, 2, std::to_string(binary_offset));
-  p = header.find("byte[] %2");
+    header_body.replace(p + 5, 2, std::to_string(binary_offset));
+  p = header_body.find("byte[] %2");
   if (p != std::string::npos)
-    header.replace(p + 7, 2, s_size);
-  p = header.find("($b, 0, %2)");
+    header_body.replace(p + 7, 2, s_size);
+  p = header_body.find("($b, 0, %2)");
   if (p != std::string::npos)
-    header.replace(header.find("%2", p), 2, s_size);
+    header_body.replace(header_body.find("%2", p), 2, s_size);
 
-  // Now write everything
-  output_file.write(reinterpret_cast<char *>(multiboot_header), multiboot_size);
-  output_file << header;
+  output_file << header_body;
 
   // Pad to binary boundary
   uint64_t current_pos = output_file.tellp();
