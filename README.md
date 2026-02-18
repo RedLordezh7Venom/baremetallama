@@ -1,7 +1,13 @@
-proposed plan  (usage)
+Model used in tests and examples: `qwen2.5-0.5b-instruct_q4_K_M.gguf`
+huggingface repo : 
+
+
+
+
+
+files
 
 ```
-gguf-bundler/
  ├─ bundler/        ← CLI tool that creates exe
  ├─ runtime/        ← modified llama.cpp server
  └─ examples/
@@ -22,8 +28,6 @@ Run:
 ./tiny_server
 → localhost:8080
 ```
-Model used in tests and examples: `qwen2.5-0.5b-instruct_q4_K_M.gguf`
-
 
 if embedded GGUF exists → use it
 else → normal file path
