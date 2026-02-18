@@ -25,39 +25,31 @@ struct BundleFooter {
 // Universal Polyglot Header (Shell + Batch)
 const char *UNIVERSAL_HEADER =
     "MZqFpD='''\n"
+    "'''\n"
     ":; # Unix Shell Logic\n"
     "case \"$(uname -s)\" in\n"
     "  Linux*)  EXT=\"linux\";;\n"
     "  Darwin*) EXT=\"mac\";;\n"
-    "  FreeBSD*) EXT=\"freebsd\";;\n"
-    "  NetBSD*) EXT=\"netbsd\";;\n"
-    "  OpenBSD*) EXT=\"openbsd\";;\n"
-    "  *)       EXT=\"unknown\";;\n"
+    "  *)       EXT=\"bin\";;\n"
     "esac\n"
-    "TMPBIN=\"/tmp/baremetallama_$(basename \"$0\")_$(date +%s)\"\n"
+    "TMPBIN=\"/tmp/baremetallama_${EXT}_$(date +%s)\"\n"
     "extract_and_run() {\n"
-    "  # Use dd to extract the binary based on offsets provided by the "
-    "bundler\n"
-    "  # For now, we assume the first binary is Linux\n"
     "  tail -c +$1 \"$0\" | head -c $2 > \"$TMPBIN\"\n"
     "  chmod +x \"$TMPBIN\"\n"
-    "  \"$TMPBIN\" \"$0\" \"$@\"\n"
+    "  \"$TMPBIN\" --model \"$0\" --offset %3 \"$@\"\n"
     "  EXIT_CODE=$?\n"
     "  rm -f \"$TMPBIN\"\n"
     "  exit $EXIT_CODE\n"
     "}\n"
     "# Extraction logic will be patched here by the bundler\n"
     "exit 0\n"
-    "'''\n"
     "/*\r\n"
     "@echo off\r\n"
-    "rem Windows logic\r\n"
     "set TMPBIN=%TEMP%\\baremetallama_%RANDOM%.exe\r\n"
-    "rem Binary extraction via PowerShell\r\n"
     "powershell -Command \"$f=[System.IO.File]::OpenRead('%~f0'); $f.Seek(%1, "
     "[System.IO.SeekOrigin]::Begin); $b=New-Object byte[] %2; $f.Read($b, 0, "
     "%2); [System.IO.File]::WriteAllBytes('%TMPBIN%', $b); $f.Close()\"\r\n"
-    "\"%TMPBIN%\" \"%~f0\" %*\r\n"
+    "\"%TMPBIN%\" --model \"%~f0\" --offset %3 %*\r\n"
     "del \"%TMPBIN%\"\r\n"
     "goto :EOF\r\n"
     "*/\n";
@@ -117,33 +109,24 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // Write Shebang for Linux/Unix compatibility at 0 offset
-  output_file << "#!/bin/sh\n";
+  // Calculate offsets first
+  std::string shebang = "#!/bin/sh\n";
+  std::string header_body = UNIVERSAL_HEADER;
 
-  // Multiboot Header (for Bare Metal support) - must be in first 8KB
+  uint64_t multiboot_pos = 64;
   uint32_t multiboot_header[] = {0x1BADB002, 0, (uint32_t)-(0x1BADB002 + 0)};
   uint64_t multiboot_size = sizeof(multiboot_header);
-  output_file.write(reinterpret_cast<char *>(multiboot_header), multiboot_size);
 
-  // Write Universal Polyglot Header (Skip the first #!/bin/sh since we wrote
-  // it)
-  std::string header_body = UNIVERSAL_HEADER;
-  if (header_body.substr(0, 10) ==
-      "#!/bin/sh\n") { // This check is defensive, as we removed it from the
-                       // constant
-    header_body = header_body.substr(10);
-  }
+  uint64_t header_total_size = shebang.size() +
+                               (multiboot_pos - shebang.size()) +
+                               multiboot_size + header_body.size();
+  uint64_t binary_offset = (header_total_size + 4095) & ~4095;
+  uint64_t model_offset = (binary_offset + server_size + 4095) & ~4095;
 
-  // Update header pos calc
-  uint64_t shebang_size = 10; // "#!/bin/sh\n"
-  uint64_t current_pos_after_multiboot = shebang_size + multiboot_size;
-  uint64_t head_size = header_body.size();
-  uint64_t binary_offset =
-      (current_pos_after_multiboot + head_size + 4095) & ~4095;
-
-  // Patch headers... (same as before but on header_body)
+  // Patch extraction offsets
   std::string s_off = std::to_string(binary_offset + 1);
   std::string s_size = std::to_string(server_size);
+  std::string s_moff = std::to_string(model_offset);
 
   size_t p = header_body.find("tail -c +$1");
   if (p != std::string::npos)
@@ -165,23 +148,28 @@ int main(int argc, char *argv[]) {
   if (p != std::string::npos)
     header_body.replace(header_body.find("%2", p), 2, s_size);
 
+  while ((p = header_body.find("%3")) != std::string::npos) {
+    header_body.replace(p, 2, s_moff);
+  }
+
+  // Write all components
+  output_file << shebang;
   output_file << header_body;
 
-  // Pad to binary boundary
-  uint64_t current_pos = output_file.tellp();
-  if (binary_offset > current_pos) {
-    std::vector<char> padding(binary_offset - current_pos, 0);
+  // Pad to binary with SPACES (no nulls in the first page!)
+  uint64_t cur = output_file.tellp();
+  if (binary_offset > cur) {
+    std::vector<char> padding(binary_offset - cur, ' ');
     output_file.write(padding.data(), padding.size());
   }
 
   // Write server binary (payload)
   output_file << server_infile.rdbuf();
 
-  // Pad to next page boundary for model
-  current_pos = output_file.tellp();
-  uint64_t model_offset = (current_pos + 4095) & ~4095;
-  if (model_offset > current_pos) {
-    std::vector<char> padding(model_offset - current_pos, 0);
+  // Pad to model boundary
+  cur = output_file.tellp();
+  if (model_offset > cur) {
+    std::vector<char> padding(model_offset - cur, 0);
     output_file.write(padding.data(), padding.size());
   }
 
