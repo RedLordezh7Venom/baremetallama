@@ -1,7 +1,7 @@
 Model used in tests and examples: `qwen2.5-0.5b-instruct_q4_K_M.gguf`
 
 
-huggingface repo : https://huggingface.co/provetgrizzner/qwen-bundle/upload/main
+huggingface repo : https://huggingface.co/provetgrizzner/qwen-bundle/
 
 
 
