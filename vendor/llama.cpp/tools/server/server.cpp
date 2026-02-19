@@ -286,8 +286,12 @@ int main(int argc, char ** argv) {
 
 #pragma pack(pop)
 
+#ifdef __COSMOPOLITAN__
+        const char * exe_path = GetProgramExecutableName();
+#else
         const char * exe_path = "/proc/self/exe";
-        FILE *       f        = fopen(exe_path, "rb");
+#endif
+        FILE * f = fopen(exe_path, "rb");
         if (f) {
             fseek(f, -((long) sizeof(BundleFooter)), SEEK_END);
             BundleFooter footer;
