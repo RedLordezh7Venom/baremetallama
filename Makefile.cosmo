@@ -3,9 +3,9 @@
 CC = $(PWD)/cosmocc/bin/cosmocc
 CXX = $(PWD)/cosmocc/bin/cosmoc++
 
-INCLUDES = -Ivendor/llama.cpp/include -Ivendor/llama.cpp/ggml/include -Ivendor/llama.cpp/common -Ivendor/llama.cpp/ggml/src -Ivendor/llama.cpp/ggml/src/ggml-cpu -Ivendor/llama.cpp/src -Ivendor/llama.cpp/vendor -Ivendor/llama.cpp/tools/mtmd
-CFLAGS = -O3 -mcosmo $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\"
-CXXFLAGS = -O3 -mcosmo -std=c++17 $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\"
+INCLUDES = -Ivendor/llama.cpp/include -Ivendor/llama.cpp/ggml/include -Ivendor/llama.cpp/common -Ivendor/llama.cpp/ggml/src -Ivendor/llama.cpp/ggml/src/ggml-cpu -Ivendor/llama.cpp/src -Ivendor/llama.cpp/vendor -Ivendor/llama.cpp/tools/mtmd -Ivendor/llama.cpp/build/tools/server
+CFLAGS = -O3 -mcosmo $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC -DLLAMA_BUILD_NUMBER=0 -DLLAMA_COMMIT=\"cosmo\"
+CXXFLAGS = -O3 -mcosmo -std=c++17 $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC -DLLAMA_BUILD_NUMBER=0 -DLLAMA_COMMIT=\"cosmo\"
 
 # GGML Sources
 GGML_SRC = \
@@ -15,6 +15,7 @@ GGML_SRC = \
     vendor/llama.cpp/ggml/src/ggml-backend-reg.cpp \
     vendor/llama.cpp/ggml/src/ggml-quants.c \
     vendor/llama.cpp/ggml/src/ggml-threading.cpp \
+    vendor/llama.cpp/ggml/src/ggml-backend-dl.cpp \
     vendor/llama.cpp/ggml/src/ggml-opt.cpp \
     vendor/llama.cpp/ggml/src/gguf.cpp \
     vendor/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c \
@@ -47,7 +48,16 @@ LLAMA_SRC = \
     vendor/llama.cpp/src/llama-hparams.cpp \
     vendor/llama.cpp/src/llama-mmap.cpp \
     vendor/llama.cpp/src/llama-model.cpp \
-    vendor/llama.cpp/src/llama-quant.cpp
+    vendor/llama.cpp/src/llama-quant.cpp \
+    vendor/llama.cpp/src/llama-cparams.cpp \
+    vendor/llama.cpp/src/llama-graph.cpp \
+    vendor/llama.cpp/src/llama-io.cpp \
+    vendor/llama.cpp/src/llama-kv-cache-iswa.cpp \
+    vendor/llama.cpp/src/llama-memory-hybrid-iswa.cpp \
+    vendor/llama.cpp/src/llama-memory-hybrid.cpp \
+    vendor/llama.cpp/src/llama-memory-recurrent.cpp \
+    vendor/llama.cpp/src/llama-memory.cpp \
+    vendor/llama.cpp/src/llama-model-saver.cpp
 
 # Common Sources
 COMMON_SRC = \
@@ -60,18 +70,37 @@ COMMON_SRC = \
     vendor/llama.cpp/common/regex-partial.cpp \
     vendor/llama.cpp/common/speculative.cpp \
     vendor/llama.cpp/common/log.cpp \
-	vendor/llama.cpp/common/arg.cpp
+	vendor/llama.cpp/common/arg.cpp \
+    vendor/llama.cpp/common/chat.cpp \
+    vendor/llama.cpp/common/chat-parser.cpp \
+    vendor/llama.cpp/common/chat-parser-xml-toolcall.cpp \
+    vendor/llama.cpp/common/chat-peg-parser.cpp \
+    vendor/llama.cpp/common/preset.cpp \
+    vendor/llama.cpp/common/ngram-cache.cpp \
+    vendor/llama.cpp/common/ngram-map.cpp \
+    vendor/llama.cpp/common/ngram-mod.cpp \
+    vendor/llama.cpp/common/download.cpp
 
 # Server Sources
 SERVER_SRC = \
     vendor/llama.cpp/tools/server/server.cpp \
-    vendor/llama.cpp/tools/mtmd/mtmd-helper.cpp
+    vendor/llama.cpp/tools/server/server-common.cpp \
+    vendor/llama.cpp/tools/server/server-context.cpp \
+    vendor/llama.cpp/tools/server/server-http.cpp \
+    vendor/llama.cpp/tools/server/server-models.cpp \
+    vendor/llama.cpp/tools/server/server-queue.cpp \
+    vendor/llama.cpp/tools/server/server-task.cpp \
+    vendor/llama.cpp/tools/mtmd/mtmd-helper.cpp \
+    vendor/llama.cpp/tools/mtmd/mtmd.cpp \
+    vendor/llama.cpp/tools/mtmd/mtmd-audio.cpp \
+    vendor/llama.cpp/tools/mtmd/clip.cpp \
+    $(wildcard vendor/llama.cpp/tools/mtmd/models/*.cpp)
 
-OBJS = $(GGML_SRC:.c=.o)
-OBJS += $(GGML_SRC:.cpp=.o)
-OBJS += $(LLAMA_SRC:.cpp=.o)
-OBJS += $(COMMON_SRC:.cpp=.o)
-OBJS += $(SERVER_SRC:.cpp=.o)
+OBJS = $(GGML_SRC:.c=.c.o)
+OBJS += $(GGML_SRC:.cpp=.cpp.o)
+OBJS += $(LLAMA_SRC:.cpp=.cpp.o)
+OBJS += $(COMMON_SRC:.cpp=.cpp.o)
+OBJS += $(SERVER_SRC:.cpp=.cpp.o)
 
 # Helper to filter out source files from OBJS list to get only object files
 # This is needed because the variable substitution above doesn't remove the source files from the list if they don't match pattern
@@ -82,10 +111,10 @@ all: llama-server.com
 llama-server.com: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
 
-%.o: %.c
+%.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.cpp
+%.cpp.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
