@@ -57,3 +57,11 @@ To build this without harming the original bundler, we would:
 3.  **Stage 3**: Combine the kernel and model into the `.pureblm` format using a new `pure-bundler` utility.
 
 *This approach turns the AI model into its own Operating System—a dedicated intelligence engine running on "Pure Metal."*
+
+---
+
+## Next Steps for Development
+
+1. **Implementing it**: Develop the freestanding micro-kernel and the OS-agnostic GGML backend.
+2. **Testing it on Virtual Machines**: Verify boot success and inference stability using **VirtualBox** and **QEMU** (emulating x86_64/ARM64 hardware).
+3. **Ensuring it makes everything and runs**: Finalize the `pure-bundler` tool to ensure a seamless "GGUF-to-ISO" conversion that results in a fully functional bootable runner.
