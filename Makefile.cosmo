@@ -60,6 +60,12 @@ LLAMA_SRC = \
     vendor/llama.cpp/src/llama-model-saver.cpp \
     $(wildcard vendor/llama.cpp/src/models/*.cpp)
 
+
+
+# Vendor Sources
+VENDOR_SRC = \
+    vendor/llama.cpp/vendor/cpp-httplib/httplib.cpp
+
 # Common Sources
 COMMON_SRC = \
     vendor/llama.cpp/common/common.cpp \
@@ -81,7 +87,15 @@ COMMON_SRC = \
     vendor/llama.cpp/common/ngram-map.cpp \
     vendor/llama.cpp/common/ngram-mod.cpp \
     vendor/llama.cpp/common/download.cpp \
-    vendor/llama.cpp/common/build-info.cpp
+    vendor/llama.cpp/common/build-info.cpp \
+    vendor/llama.cpp/common/jinja/caps.cpp \
+    vendor/llama.cpp/common/jinja/lexer.cpp \
+    vendor/llama.cpp/common/jinja/parser.cpp \
+    vendor/llama.cpp/common/jinja/runtime.cpp \
+    vendor/llama.cpp/common/jinja/string.cpp \
+    vendor/llama.cpp/common/jinja/value.cpp \
+    vendor/llama.cpp/common/license.cpp \
+    vendor/llama.cpp/common/unicode.cpp
 
 # Server Sources
 SERVER_SRC = \
@@ -103,6 +117,7 @@ OBJS += $(COMMON_SRC:.cpp=.cpp.o)
 OBJS += $(LLAMA_SRC:.cpp=.cpp.o)
 OBJS += $(GGML_SRC:.cpp=.cpp.o)
 OBJS += $(GGML_SRC:.c=.c.o)
+OBJS += $(VENDOR_SRC:.cpp=.cpp.o)
 
 # Helper to filter out source files from OBJS list to get only object files
 # This is needed because the variable substitution above doesn't remove the source files from the list if they don't match pattern
