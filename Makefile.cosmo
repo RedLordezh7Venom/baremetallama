@@ -4,8 +4,8 @@ CC = $(PWD)/cosmocc/bin/cosmocc
 CXX = $(PWD)/cosmocc/bin/cosmoc++
 
 INCLUDES = -Ivendor/llama.cpp/include -Ivendor/llama.cpp/ggml/include -Ivendor/llama.cpp/common -Ivendor/llama.cpp/ggml/src -Ivendor/llama.cpp/ggml/src/ggml-cpu -Ivendor/llama.cpp/src -Ivendor/llama.cpp/vendor -Ivendor/llama.cpp/tools/mtmd -Ivendor/llama.cpp/build/tools/server
-CFLAGS = -O3 -mcosmo $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC -DLLAMA_BUILD_NUMBER=0 -DLLAMA_COMMIT=\"cosmo\"
-CXXFLAGS = -O3 -mcosmo -std=c++17 $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC -DLLAMA_BUILD_NUMBER=0 -DLLAMA_COMMIT=\"cosmo\"
+CFLAGS = -O3 -mcosmo $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC
+CXXFLAGS = -O3 -mcosmo -std=c++17 $(INCLUDES) -D_XOPEN_SOURCE=700 -D_GNU_SOURCE -DGGML_USE_CPU -D__linux__ -DGGML_VERSION=\"cosmo\" -DGGML_COMMIT=\"cosmo\" -DGGML_CPU_GENERIC
 
 # GGML Sources
 GGML_SRC = \
@@ -57,7 +57,8 @@ LLAMA_SRC = \
     vendor/llama.cpp/src/llama-memory-hybrid.cpp \
     vendor/llama.cpp/src/llama-memory-recurrent.cpp \
     vendor/llama.cpp/src/llama-memory.cpp \
-    vendor/llama.cpp/src/llama-model-saver.cpp
+    vendor/llama.cpp/src/llama-model-saver.cpp \
+    $(wildcard vendor/llama.cpp/src/models/*.cpp)
 
 # Common Sources
 COMMON_SRC = \
@@ -79,7 +80,8 @@ COMMON_SRC = \
     vendor/llama.cpp/common/ngram-cache.cpp \
     vendor/llama.cpp/common/ngram-map.cpp \
     vendor/llama.cpp/common/ngram-mod.cpp \
-    vendor/llama.cpp/common/download.cpp
+    vendor/llama.cpp/common/download.cpp \
+    vendor/llama.cpp/common/build-info.cpp
 
 # Server Sources
 SERVER_SRC = \
@@ -96,11 +98,11 @@ SERVER_SRC = \
     vendor/llama.cpp/tools/mtmd/clip.cpp \
     $(wildcard vendor/llama.cpp/tools/mtmd/models/*.cpp)
 
-OBJS = $(GGML_SRC:.c=.c.o)
-OBJS += $(GGML_SRC:.cpp=.cpp.o)
-OBJS += $(LLAMA_SRC:.cpp=.cpp.o)
+OBJS = $(SERVER_SRC:.cpp=.cpp.o)
 OBJS += $(COMMON_SRC:.cpp=.cpp.o)
-OBJS += $(SERVER_SRC:.cpp=.cpp.o)
+OBJS += $(LLAMA_SRC:.cpp=.cpp.o)
+OBJS += $(GGML_SRC:.cpp=.cpp.o)
+OBJS += $(GGML_SRC:.c=.c.o)
 
 # Helper to filter out source files from OBJS list to get only object files
 # This is needed because the variable substitution above doesn't remove the source files from the list if they don't match pattern

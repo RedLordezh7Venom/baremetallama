@@ -1,5 +1,7 @@
 #include "ngram-mod.h"
 
+#include <algorithm>
+
 //
 // common_ngram_mod
 //
@@ -14,7 +16,7 @@ size_t common_ngram_mod::idx(const entry_t * tokens) const {
     size_t res = 0;
 
     for (size_t i = 0; i < n; ++i) {
-        res = res*6364136223846793005ULL + tokens[i];
+        res = res * 6364136223846793005ULL + tokens[i];
     }
 
     res = res % entries.size();

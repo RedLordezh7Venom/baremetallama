@@ -1,12 +1,12 @@
-#include "arg.h"
-
-#include "common.h"
-#include "gguf.h" // for reading GGUF splits
-#include "log.h"
 #include "download.h"
 
+#include "arg.h"
+#include "common.h"
+#include "gguf.h"  // for reading GGUF splits
+#include "log.h"
+
 #define JSON_ASSERT GGML_ASSERT
-#include <nlohmann/json.hpp>
+#include "http.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -14,34 +14,39 @@
 #include <future>
 #include <map>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "http.h"
-
 #ifndef __EMSCRIPTEN__
-#ifdef __linux__
-#include <linux/limits.h>
-#elif defined(_WIN32)
-#   if !defined(PATH_MAX)
-#   define PATH_MAX MAX_PATH
-#   endif
-#elif defined(_AIX)
-#include <sys/limits.h>
-#else
-#include <sys/syslimits.h>
-#endif
+#    ifdef __linux__
+#        if defined(__COSMOPOLITAN__)
+#            include <limits.h>
+#        else
+#            include <linux/limits.h>
+#        endif
+#    elif defined(_WIN32)
+#        if !defined(PATH_MAX)
+#            define PATH_MAX MAX_PATH
+#        endif
+#    elif defined(_AIX)
+#        include <sys/limits.h>
+#    elif defined(__COSMOPOLITAN__)
+#        include <limits.h>
+#    else
+#        include <sys/syslimits.h>
+#    endif
 #endif
 
-#define LLAMA_MAX_URL_LENGTH 2084 // Maximum URL Length in Chrome: 2083
+#define LLAMA_MAX_URL_LENGTH 2084  // Maximum URL Length in Chrome: 2083
 
 // isatty
 #if defined(_WIN32)
-#include <io.h>
+#    include <io.h>
 #else
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 
 using json = nlohmann::ordered_json;
@@ -131,19 +136,19 @@ static bool is_http_status_ok(int status) {
 }
 
 std::pair<std::string, std::string> common_download_split_repo_tag(const std::string & hf_repo_with_tag) {
-    auto parts = string_split<std::string>(hf_repo_with_tag, ':');
-    std::string tag = parts.size() > 1 ? parts.back() : "latest";
+    auto        parts   = string_split<std::string>(hf_repo_with_tag, ':');
+    std::string tag     = parts.size() > 1 ? parts.back() : "latest";
     std::string hf_repo = parts[0];
     if (string_split<std::string>(hf_repo, '/').size() != 2) {
         throw std::invalid_argument("error: invalid HF repo format, expected <user>/<model>[:quant]\n");
     }
-    return {hf_repo, tag};
+    return { hf_repo, tag };
 }
 
 class ProgressBar {
-    static inline std::mutex mutex;
+    static inline std::mutex                         mutex;
     static inline std::map<const ProgressBar *, int> lines;
-    static inline int max_line = 0;
+    static inline int                                max_line = 0;
 
     static void cleanup(const ProgressBar * line) {
         lines.erase(line);
@@ -160,7 +165,7 @@ class ProgressBar {
 #endif
     }
 
-public:
+  public:
     ProgressBar() = default;
 
     ~ProgressBar() {
@@ -186,40 +191,36 @@ public:
         int lines_up = max_line - lines[this];
 
         size_t width = 50;
-        size_t pct = (100 * current) / total;
-        size_t pos = (width * current) / total;
+        size_t pct   = (100 * current) / total;
+        size_t pos   = (width * current) / total;
 
         std::cout << "\033[s";
 
         if (lines_up > 0) {
             std::cout << "\033[" << lines_up << "A";
         }
-        std::cout << "\033[2K\r["
-            << std::string(pos, '=')
-            << (pos < width ? ">" : "")
-            << std::string(width - pos, ' ')
-            << "] " << std::setw(3) << pct << "%  ("
-            << current / (1024 * 1024) << " MB / "
-            << total / (1024 * 1024) << " MB) "
-            << "\033[u";
+        std::cout << "\033[2K\r[" << std::string(pos, '=') << (pos < width ? ">" : "") << std::string(width - pos, ' ')
+                  << "] " << std::setw(3) << pct << "%  (" << current / (1024 * 1024) << " MB / "
+                  << total / (1024 * 1024) << " MB) "
+                  << "\033[u";
 
         std::cout.flush();
 
         if (current == total) {
-             cleanup(this);
+            cleanup(this);
         }
     }
 
-    ProgressBar(const ProgressBar &) = delete;
+    ProgressBar(const ProgressBar &)             = delete;
     ProgressBar & operator=(const ProgressBar &) = delete;
 };
 
-static bool common_pull_file(httplib::Client & cli,
+static bool common_pull_file(httplib::Client &   cli,
                              const std::string & resolve_path,
                              const std::string & path_tmp,
-                             bool supports_ranges,
-                             size_t existing_size,
-                             size_t & total_size) {
+                             bool                supports_ranges,
+                             size_t              existing_size,
+                             size_t &            total_size) {
     std::ofstream ofs(path_tmp, std::ios::binary | std::ios::app);
     if (!ofs.is_open()) {
         LOG_ERR("%s: error opening local file for writing: %s\n", __func__, path_tmp.c_str());
@@ -231,15 +232,17 @@ static bool common_pull_file(httplib::Client & cli,
         headers.emplace("Range", "bytes=" + std::to_string(existing_size) + "-");
     }
 
-    const char * func = __func__; // avoid __func__ inside a lambda
-    size_t downloaded = existing_size;
-    size_t progress_step = 0;
-    ProgressBar bar;
+    const char * func          = __func__;  // avoid __func__ inside a lambda
+    size_t       downloaded    = existing_size;
+    size_t       progress_step = 0;
+    ProgressBar  bar;
 
-    auto res = cli.Get(resolve_path, headers,
-        [&](const httplib::Response &response) {
+    auto res = cli.Get(
+        resolve_path, headers,
+        [&](const httplib::Response & response) {
             if (existing_size > 0 && response.status != 206) {
-                LOG_WRN("%s: server did not respond with 206 Partial Content for a resume request. Status: %d\n", func, response.status);
+                LOG_WRN("%s: server did not respond with 206 Partial Content for a resume request. Status: %d\n", func,
+                        response.status);
                 return false;
             }
             if (existing_size == 0 && response.status != 200) {
@@ -249,14 +252,14 @@ static bool common_pull_file(httplib::Client & cli,
             if (total_size == 0 && response.has_header("Content-Length")) {
                 try {
                     size_t content_length = std::stoull(response.get_header_value("Content-Length"));
-                    total_size = existing_size + content_length;
-                } catch (const std::exception &e) {
+                    total_size            = existing_size + content_length;
+                } catch (const std::exception & e) {
                     LOG_WRN("%s: invalid Content-Length header: %s\n", func, e.what());
                 }
             }
             return true;
         },
-        [&](const char *data, size_t len) {
+        [&](const char * data, size_t len) {
             ofs.write(data, len);
             if (!ofs) {
                 LOG_ERR("%s: error writing to file: %s\n", func, path_tmp.c_str());
@@ -271,13 +274,10 @@ static bool common_pull_file(httplib::Client & cli,
             }
             return true;
         },
-        nullptr
-    );
+        nullptr);
 
     if (!res) {
-        LOG_ERR("%s: download failed: %s (status: %d)\n",
-                __func__,
-                httplib::to_string(res.error()).c_str(),
+        LOG_ERR("%s: download failed: %s (status: %d)\n", __func__, httplib::to_string(res.error()).c_str(),
                 res ? res->status : -1);
         return false;
     }
@@ -287,9 +287,9 @@ static bool common_pull_file(httplib::Client & cli,
 
 // download one single file from remote URL to local path
 // returns status code or -1 on error
-static int common_download_file_single_online(const std::string        & url,
-                                              const std::string        & path,
-                                              const std::string        & bearer_token,
+static int common_download_file_single_online(const std::string &        url,
+                                              const std::string &        path,
+                                              const std::string &        bearer_token,
                                               const common_header_list & custom_headers) {
     static const int max_attempts        = 3;
     static const int retry_delay_seconds = 2;
@@ -322,7 +322,7 @@ static int common_download_file_single_online(const std::string        & url,
         LOG_WRN("%s: HEAD failed, status: %d\n", __func__, head ? head->status : -1);
         if (file_exists) {
             LOG_INF("%s: using cached file (HEAD failed): %s\n", __func__, path.c_str());
-            return 304; // 304 Not Modified - fake cached response
+            return 304;  // 304 Not Modified - fake cached response
         }
         return head ? head->status : -1;
     }
@@ -336,7 +336,7 @@ static int common_download_file_single_online(const std::string        & url,
     if (head->has_header("Content-Length")) {
         try {
             total_size = std::stoull(head->get_header_value("Content-Length"));
-        } catch (const std::exception& e) {
+        } catch (const std::exception & e) {
             LOG_WRN("%s: invalid Content-Length in HEAD response: %s\n", __func__, e.what());
         }
     }
@@ -349,11 +349,11 @@ static int common_download_file_single_online(const std::string        & url,
     if (file_exists) {
         if (etag.empty()) {
             LOG_INF("%s: using cached file (no server etag): %s\n", __func__, path.c_str());
-            return 304; // 304 Not Modified - fake cached response
+            return 304;  // 304 Not Modified - fake cached response
         }
         if (!last_etag.empty() && last_etag == etag) {
             LOG_INF("%s: using cached file (same etag): %s\n", __func__, path.c_str());
-            return 304; // 304 Not Modified - fake cached response
+            return 304;  // 304 Not Modified - fake cached response
         }
         if (remove(path.c_str()) != 0) {
             LOG_ERR("%s: unable to delete file: %s\n", __func__, path.c_str());
@@ -362,7 +362,7 @@ static int common_download_file_single_online(const std::string        & url,
     }
 
     const std::string path_temporary = path + ".downloadInProgress";
-    int delay = retry_delay_seconds;
+    int               delay          = retry_delay_seconds;
 
     for (int i = 0; i < max_attempts; ++i) {
         if (i) {
@@ -382,8 +382,7 @@ static int common_download_file_single_online(const std::string        & url,
             }
         }
 
-        LOG_INF("%s: downloading from %s to %s (etag:%s)...\n",
-                __func__, common_http_show_masked_url(parts).c_str(),
+        LOG_INF("%s: downloading from %s to %s (etag:%s)...\n", __func__, common_http_show_masked_url(parts).c_str(),
                 path_temporary.c_str(), etag.c_str());
 
         if (common_pull_file(cli, parts.path, path_temporary, supports_ranges, existing_size, total_size)) {
@@ -399,10 +398,10 @@ static int common_download_file_single_online(const std::string        & url,
     }
 
     LOG_ERR("%s: download failed after %d attempts\n", __func__, max_attempts);
-    return -1; // max attempts reached
+    return -1;  // max attempts reached
 }
 
-std::pair<long, std::vector<char>> common_remote_get_content(const std::string          & url,
+std::pair<long, std::vector<char>> common_remote_get_content(const std::string &          url,
                                                              const common_remote_params & params) {
     auto [cli, parts] = common_http_client(url);
 
@@ -420,14 +419,13 @@ std::pair<long, std::vector<char>> common_remote_get_content(const std::string  
     }
 
     std::vector<char> buf;
-    auto res = cli.Get(parts.path, headers,
-        [&](const char *data, size_t len) {
+    auto              res = cli.Get(
+        parts.path, headers,
+        [&](const char * data, size_t len) {
             buf.insert(buf.end(), data, data + len);
-            return params.max_size == 0 ||
-                   buf.size() <= static_cast<size_t>(params.max_size);
+            return params.max_size == 0 || buf.size() <= static_cast<size_t>(params.max_size);
         },
-        nullptr
-    );
+        nullptr);
 
     if (!res) {
         throw std::runtime_error("error: cannot make GET request");
@@ -436,10 +434,10 @@ std::pair<long, std::vector<char>> common_remote_get_content(const std::string  
     return { res->status, std::move(buf) };
 }
 
-int common_download_file_single(const std::string & url,
-                                const std::string & path,
-                                const std::string & bearer_token,
-                                bool offline,
+int common_download_file_single(const std::string &        url,
+                                const std::string &        path,
+                                const std::string &        bearer_token,
+                                bool                       offline,
                                 const common_header_list & headers) {
     if (!offline) {
         return common_download_file_single_online(url, path, bearer_token, headers);
@@ -451,30 +449,28 @@ int common_download_file_single(const std::string & url,
     }
 
     LOG_INF("%s: using cached file (offline mode): %s\n", __func__, path.c_str());
-    return 304; // Not Modified - fake cached response
+    return 304;  // Not Modified - fake cached response
 }
 
 // download multiple files from remote URLs to local paths
 // the input is a vector of pairs <url, path>
 static bool common_download_file_multiple(const std::vector<std::pair<std::string, std::string>> & urls,
-                                          const std::string & bearer_token,
-                                          bool offline,
-                                          const common_header_list & headers) {
+                                          const std::string &                                      bearer_token,
+                                          bool                                                     offline,
+                                          const common_header_list &                               headers) {
     // Prepare download in parallel
     std::vector<std::future<bool>> futures_download;
     futures_download.reserve(urls.size());
 
-    for (auto const & item : urls) {
-        futures_download.push_back(
-            std::async(
-                std::launch::async,
-                [&bearer_token, offline, &headers](const std::pair<std::string, std::string> & it) -> bool {
-                    const int http_status = common_download_file_single(it.first, it.second, bearer_token, offline, headers);
-                    return is_http_status_ok(http_status);
-                },
-                item
-            )
-        );
+    for (const auto & item : urls) {
+        futures_download.push_back(std::async(
+            std::launch::async,
+            [&bearer_token, offline, &headers](const std::pair<std::string, std::string> & it) -> bool {
+                const int http_status =
+                    common_download_file_single(it.first, it.second, bearer_token, offline, headers);
+                return is_http_status_ok(http_status);
+            },
+            item));
     }
 
     // Wait for all downloads to complete
@@ -488,9 +484,9 @@ static bool common_download_file_multiple(const std::vector<std::pair<std::strin
 }
 
 bool common_download_model(const common_params_model & model,
-                           const std::string & bearer_token,
-                           bool offline,
-                           const common_header_list & headers) {
+                           const std::string &         bearer_token,
+                           bool                        offline,
+                           const common_header_list &  headers) {
     // Basic validation of the model.url
     if (model.url.empty()) {
         LOG_ERR("%s: invalid model url\n", __func__);
@@ -524,8 +520,8 @@ bool common_download_model(const common_params_model & model,
     }
 
     if (n_split > 1) {
-        char split_prefix[PATH_MAX] = {0};
-        char split_url_prefix[LLAMA_MAX_URL_LENGTH] = {0};
+        char split_prefix[PATH_MAX]                 = { 0 };
+        char split_url_prefix[LLAMA_MAX_URL_LENGTH] = { 0 };
 
         // Verify the first split file format
         // and extract split URL and PATH prefixes
@@ -543,17 +539,17 @@ bool common_download_model(const common_params_model & model,
 
         std::vector<std::pair<std::string, std::string>> urls;
         for (int idx = 1; idx < n_split; idx++) {
-            char split_path[PATH_MAX] = {0};
+            char split_path[PATH_MAX] = { 0 };
             llama_split_path(split_path, sizeof(split_path), split_prefix, idx, n_split);
 
-            char split_url[LLAMA_MAX_URL_LENGTH] = {0};
+            char split_url[LLAMA_MAX_URL_LENGTH] = { 0 };
             llama_split_path(split_url, sizeof(split_url), split_url_prefix, idx, n_split);
 
             if (std::string(split_path) == model.path) {
-                continue; // skip the already downloaded file
+                continue;  // skip the already downloaded file
             }
 
-            urls.push_back({split_url, split_path});
+            urls.push_back({ split_url, split_path });
         }
 
         // Download in parallel
@@ -563,9 +559,9 @@ bool common_download_model(const common_params_model & model,
     return true;
 }
 
-common_hf_file_res common_get_hf_file(const std::string & hf_repo_with_tag,
-                                      const std::string & bearer_token,
-                                      bool offline,
+common_hf_file_res common_get_hf_file(const std::string &        hf_repo_with_tag,
+                                      const std::string &        bearer_token,
+                                      bool                       offline,
                                       const common_header_list & custom_headers) {
     // the returned hf_repo is without tag
     auto [hf_repo, tag] = common_download_split_repo_tag(hf_repo_with_tag);
@@ -574,25 +570,25 @@ common_hf_file_res common_get_hf_file(const std::string & hf_repo_with_tag,
 
     // headers
     common_header_list headers = custom_headers;
-    headers.push_back({"Accept", "application/json"});
+    headers.push_back({ "Accept", "application/json" });
     if (!bearer_token.empty()) {
-        headers.push_back({"Authorization", "Bearer " + bearer_token});
+        headers.push_back({ "Authorization", "Bearer " + bearer_token });
     }
     // Important: the User-Agent must be "llama-cpp" to get the "ggufFile" field in the response
     // User-Agent header is already set in common_remote_get_content, no need to set it here
 
     // make the request
     common_remote_params params;
-    params.headers = headers;
-    long res_code = 0;
+    params.headers       = headers;
+    long        res_code = 0;
     std::string res_str;
-    bool use_cache = false;
+    bool        use_cache            = false;
     std::string cached_response_path = get_manifest_path(hf_repo, tag);
     if (!offline) {
         try {
             auto res = common_remote_get_content(url, params);
             res_code = res.first;
-            res_str = std::string(res.second.data(), res.second.size());
+            res_str  = std::string(res.second.data(), res.second.size());
         } catch (const std::exception & e) {
             LOG_WRN("error: failed to get manifest at %s: %s\n", url.c_str(), e.what());
         }
@@ -600,13 +596,12 @@ common_hf_file_res common_get_hf_file(const std::string & hf_repo_with_tag,
     if (res_code == 0) {
         if (std::filesystem::exists(cached_response_path)) {
             LOG_WRN("trying to read manifest from cache: %s\n", cached_response_path.c_str());
-            res_str = read_file(cached_response_path);
-            res_code = 200;
+            res_str   = read_file(cached_response_path);
+            res_code  = 200;
             use_cache = true;
         } else {
-            throw std::runtime_error(
-                offline ? "error: failed to get manifest (offline mode)"
-                : "error: failed to get manifest (check your internet connection)");
+            throw std::runtime_error(offline ? "error: failed to get manifest (offline mode)" :
+                                               "error: failed to get manifest (check your internet connection)");
         }
     }
     std::string ggufFile;
@@ -630,9 +625,12 @@ common_hf_file_res common_get_hf_file(const std::string & hf_repo_with_tag,
             write_file(cached_response_path, res_str);
         }
     } else if (res_code == 401) {
-        throw std::runtime_error("error: model is private or does not exist; if you are accessing a gated model, please provide a valid HF token");
+        throw std::runtime_error(
+            "error: model is private or does not exist; if you are accessing a gated model, please provide a valid HF "
+            "token");
     } else {
-        throw std::runtime_error(string_format("error from HF API (%s), response code: %ld, data: %s", url.c_str(), res_code, res_str.c_str()));
+        throw std::runtime_error(string_format("error from HF API (%s), response code: %ld, data: %s", url.c_str(),
+                                               res_code, res_str.c_str()));
     }
 
     // check response
@@ -680,7 +678,7 @@ std::string common_docker_resolve_model(const std::string & docker) {
     }
 
     // ai/ is the default
-    size_t      slash_pos = docker.find('/');
+    size_t slash_pos = docker.find('/');
     if (slash_pos == std::string::npos) {
         repo.insert(0, "ai/");
     }
@@ -692,15 +690,14 @@ std::string common_docker_resolve_model(const std::string & docker) {
             // Expected: algo:hex ; start with sha256 (64 hex chars)
             // You can extend this map if supporting other algorithms in future.
             static const std::regex re("^sha256:([a-fA-F0-9]{64})$");
-            std::smatch m;
+            std::smatch             m;
             if (!std::regex_match(digest, m, re)) {
                 throw std::runtime_error("Invalid OCI digest format received in manifest: " + digest);
             }
             // normalize hex to lowercase
             std::string normalized = digest;
-            std::transform(normalized.begin()+7, normalized.end(), normalized.begin()+7, [](unsigned char c){
-                return std::tolower(c);
-            });
+            std::transform(normalized.begin() + 7, normalized.end(), normalized.begin() + 7,
+                           [](unsigned char c) { return std::tolower(c); });
             return normalized;
         };
 
@@ -708,13 +705,13 @@ std::string common_docker_resolve_model(const std::string & docker) {
 
         // Get manifest
         // TODO: cache the manifest response so that it appears in the model list
-        const std::string    url_prefix = "https://registry-1.docker.io/v2/" + repo;
+        const std::string    url_prefix   = "https://registry-1.docker.io/v2/" + repo;
         std::string          manifest_url = url_prefix + "/manifests/" + tag;
         common_remote_params manifest_params;
-        manifest_params.headers.push_back({"Authorization", "Bearer " + token});
-        manifest_params.headers.push_back({"Accept",
-            "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
-        });
+        manifest_params.headers.push_back({ "Authorization", "Bearer " + token });
+        manifest_params.headers.push_back(
+            { "Accept",
+              "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json" });
         auto manifest_res = common_remote_get_content(manifest_url, manifest_params);
         if (manifest_res.first != 200) {
             throw std::runtime_error("Failed to get Docker manifest, HTTP code: " + std::to_string(manifest_res.first));
@@ -750,8 +747,8 @@ std::string common_docker_resolve_model(const std::string & docker) {
         model_filename += "_" + tag + ".gguf";
         std::string local_path = fs_get_cache_file(model_filename);
 
-        const std::string blob_url = url_prefix + "/blobs/" + gguf_digest;
-        const int http_status = common_download_file_single(blob_url, local_path, token, false, {});
+        const std::string blob_url    = url_prefix + "/blobs/" + gguf_digest;
+        const int         http_status = common_download_file_single(blob_url, local_path, token, false, {});
         if (!is_http_status_ok(http_status)) {
             throw std::runtime_error("Failed to download Docker Model");
         }
@@ -766,14 +763,14 @@ std::string common_docker_resolve_model(const std::string & docker) {
 
 std::vector<common_cached_model_info> common_list_cached_models() {
     std::vector<common_cached_model_info> models;
-    const std::string cache_dir = fs_get_cache_directory();
-    const std::vector<common_file_info> files = fs_list(cache_dir, false);
+    const std::string                     cache_dir = fs_get_cache_directory();
+    const std::vector<common_file_info>   files     = fs_list(cache_dir, false);
     for (const auto & file : files) {
         if (string_starts_with(file.name, "manifest=") && string_ends_with(file.name, ".json")) {
             common_cached_model_info model_info;
             model_info.manifest_path = file.path;
-            std::string fname = file.name;
-            string_replace_all(fname, ".json", ""); // remove extension
+            std::string fname        = file.name;
+            string_replace_all(fname, ".json", "");  // remove extension
             auto parts = string_split<std::string>(fname, '=');
             if (parts.size() == 4) {
                 // expect format: manifest=<user>=<model>=<tag>=<other>
@@ -784,7 +781,7 @@ std::vector<common_cached_model_info> common_list_cached_models() {
                 // invalid format
                 continue;
             }
-            model_info.size = 0; // TODO: get GGUF size, not manifest size
+            model_info.size = 0;  // TODO: get GGUF size, not manifest size
             models.push_back(model_info);
         }
     }
