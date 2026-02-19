@@ -78,9 +78,10 @@ int main(int argc, char *argv[]) {
   // Write server binary (Payload at START of file for PE compatibility)
   output_file << server_infile.rdbuf();
 
-  // Align model to 4KB boundary
+  // Align model to 64KB boundary for cross-platform mmap compatibility (Windows
+  // requirements)
   uint64_t cur = output_file.tellp();
-  uint64_t model_offset = (cur + 4095) & ~4095;
+  uint64_t model_offset = (cur + 65535) & ~65535;
   if (model_offset > cur) {
     std::vector<char> padding(model_offset - cur, 0);
     output_file.write(padding.data(), padding.size());
