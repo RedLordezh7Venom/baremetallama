@@ -48,7 +48,7 @@
 #    include <unistd.h>
 #endif
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__COSMOPOLITAN__)
 #    include <pwd.h>
 #    include <sys/types.h>
 #endif
@@ -918,7 +918,8 @@ std::string fs_get_cache_directory() {
     if (getenv("LLAMA_CACHE")) {
         cache_directory = std::getenv("LLAMA_CACHE");
     } else {
-#if defined(__linux__) || defined(__FreeBSD__) || defined(_AIX) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(_AIX) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+    defined(__COSMOPOLITAN__)
         if (std::getenv("XDG_CACHE_HOME")) {
             cache_directory = std::getenv("XDG_CACHE_HOME");
         } else if (std::getenv("HOME")) {
