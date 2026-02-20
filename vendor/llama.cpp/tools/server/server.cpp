@@ -14,11 +14,6 @@
 #include <exception>
 #include <thread>  // for std::thread::hardware_concurrency
 
-#ifndef _WIN32
-#    include <sys/ioctl.h>
-#    include <unistd.h>
-#endif
-
 #if defined(_WIN32)
 #    include <windows.h>
 #endif
@@ -190,21 +185,13 @@ struct cli_context {
 };
 
 const char * LLAMA_ASCII_LOGO = R"(
- ██ ██      ▄█▀▀█▄ ███▄   ███▄ ▄█▀▀█▄    ▄████  ████▄  ████▄
- ██ ██     ▄█▀  ▀█ ████▄ ████ ▄█▀  ▀█   ██     ██  ██ ██  ██
- ██ ██     ██    ██ ██ ███ ██ ██    ██ ██      ████▀  ████▀
- ██ ██     █▀▀▀▀▀█ ██  ▀  ██ █▀▀▀▀▀█ ██      ██     ██
- ██ ██████ █      █ ██     ██ █      █  ▀█████ ██     ██
-)";
-
-const char * BML_ASCII_LOGO = R"(
-        ______               ___  ___     _        _ 
-        | ___ \              |  \/  |    | |      | |
-        | |_/ / __ _ _ __ ___| .  . | ___| |_ __ _| |
-        | ___ \/ _` | '__/ _ \ |\/| |/ _ \ __/ _` | |
-        | |_/ / (_| | | |  __/ |  | |  __/ || (_| | |
-        \____/ \__,_|_|  \___\_|  |_/\___|\__\__,_|_|
-                ⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⣷⠀⠀⠀⠀⠀⠀⠀⣾⢣⡀⠀⠀⠀⠀⠀⠀⠀
+        [1;35m______               [1;36m___  ___     [1;34m_        _ [0m
+        [1;35m| ___ \              [1;36m|  \/  |    [1;34m| |      | |[0m
+        [1;35m| |_/ / __ _ _ __ ___[1;36m| .  . | ___[1;34m| |_ __ _| |[0m
+        [1;35m| ___ \/ _` | '__/ _ [1;36m| |\/| |/ _ [1;34m\ __/ _` | |[0m
+        [1;35m| |_/ / (_| | | |  __/[1;36m|  | |  __/[1;34m| || (_| | |[0m
+        [1;35m\____/ \__,_|_|  \___[1;36m_|  |_/\___|[1;34m__\__,_|_|[0m
+                [35m⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⣷⠀⠀⠀⠀⠀⠀⠀⣾⢣⡀⠀⠀⠀⠀⠀⠀⠀
                 ⠀⢀⣠⣶⣿⣿⣿⣛⣹⠿⠋⠀⠀⢀⢧⠀⠀⠀⠘⠻⣼⣯⣹⣶⠲⣤⡀⠀
                 ⠀⣾⣿⠋⢀⠏⠀⠀⠀⠀⠀⠀⠀⢸⠀⢆⠀⠀⠀⠀⠀⠀⠙⢿⣿⢶⣷⠀
                 ⢸⠿⢰⣭⣏⠀⠀⠀⠀⠀⢀⡠⠴⠧⣦⡼⠕⢄⡀⠀⠀⠀⠀⠀⣿⠠⠷⣧
@@ -219,117 +206,40 @@ const char * BML_ASCII_LOGO = R"(
                 ⠀⠀⠀⠀⠀⡇⡔⠁⠀⠀⡿⠀⠘⠤⡤⣠⢇⢸⣇⠈⠙⠄⡇⠀⠀⠀⠀⠀
                 ⠀⠀⠀⠀⠀⠐⠇⠀⠀⢰⣿⣷⣆⣇⣥⢸⣬⣿⡻⠀⠀⠸⠃⠀⠀⠀⠀⠀
                 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢿⡟⡏⣻⠛⣻⠶⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-                ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⠘⠁⠏⠁⠀⠀⠀⠀⠀⠀⠀      
-               _     _                                     
+                ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⠘⠁⠏⠁⠀⠀⠀⠀⠀⠀⠀       [0m
+               [1;35m_     _                                     
               | |   | |                                    
               | |   | | __ _ _ __ ___   __ _               
               | |   | |/ _` | '_ ` _ \ / _` |              
               | |___| | (_| | | | | | | (_| |              
-              \_____/_|\__,_|_| |_| |_|\__,_|
+              \_____/_|\__,_|_| |_| |_|\__,_|[0m
 )";
-struct BMLTUI {
-    int term_cols = 80;
-    int term_rows = 24;
-    int chat_y    = 25;
-
-    void update_size() {
-#ifdef __linux__
-        struct winsize w;
-        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
-            term_cols = w.ws_col;
-            term_rows = w.ws_row;
-        }
-#endif
-    }
-
-    void cls() { printf("\033[2J\033[H"); }
-
-    void move(int x, int y) { printf("\033[%d;%dH", y, x); }
-
-    void color(const char * code) { printf("\033[%sm", code); }
-
-    void draw_box(int x, int y, int w, int h, const std::string & title) {
-        move(x, y);
-        printf("\xe2\x94\x8c\xe2\x94\x80 %s ", title.c_str());
-        for (int i = 0; i < w - (int) title.length() - 5; ++i) {
-            printf("\xe2\x94\x80");
-        }
-        printf("\xe2\x94\x90");
-        for (int i = 1; i < h - 1; ++i) {
-            move(x, y + i);
-            printf("\xe2\x94\x82");
-            move(x + w - 1, y + i);
-            printf("\xe2\x94\x82");
-        }
-        move(x, y + h - 1);
-        printf("\xe2\x94\x94");
-        for (int i = 0; i < w - 2; ++i) {
-            printf("\xe2\x94\x80");
-        }
-        printf("\xe2\x94\x98");
-    }
-
-    void draw_dashboard(const result_timings & timings) {
-        update_size();
-        color("0");
-        cls();
-
-        // Print original llama.cpp logo
-        color("1;36");  // Cyan
-        printf("%s", LLAMA_ASCII_LOGO);
-
-        // Print BareMetalLlama logo in purple
-        color("1;35");  // Purple
-        printf("%s", BML_ASCII_LOGO);
-        color("0");
-
-        int stats_h = 6;
-        int stats_w = 40;
-
-        color("1;34");  // Blue
-        draw_box(2, 22, stats_w, stats_h, "SYSTEM / STATS");
-        move(4, 23);
-        color("1;37");
-        printf("CPU: LOADING... [|||||     ] 45%%");
-        move(4, 24);
-        printf("GPU: VRAM: %zu MB", (size_t) 0);  // Placeholder
-        move(4, 25);
-        color("1;32");
-        printf("SPEED: %.2f tok/s", timings.predicted_per_second);
-
-        draw_box(44, 22, term_cols - 46, stats_h, "INFO");
-        move(46, 23);
-        color("0;90");
-        printf("Build: %s", "APE Universal");
-        move(46, 24);
-        printf("Model: %s", "Bundled GGUF");
-
-        chat_y = 22 + stats_h + 1;
-        draw_box(2, chat_y, term_cols - 4, term_rows - chat_y - 1, "CHAT INTERFACE");
-        color("0");
-        move(4, chat_y + 1);
-    }
-};
 
 static void run_tui(common_params & params, server_context & ctx_server) {
     cli_context ctx_cli(params, ctx_server);
     console::init(params.simple_io, params.use_color);
-    BMLTUI ui;
 
     // Start background inference loop
     std::thread inference_thread([&ctx_server]() { ctx_server.start_loop(); });
 
-    result_timings last_timings;
-    last_timings.predicted_per_second = 0.0;
-    ui.draw_dashboard(last_timings);
+    auto inf = ctx_server.get_meta();
+    console::log("\033[2J\033[H");  // Clear screen
+    console::log("%s", LLAMA_ASCII_LOGO);
 
+    // Draw stylized welcome box
+    console::log("\n\033[1;33m┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\033[0m\n");
+    console::log(
+        "\033[1;33m┃\033[0m  BareMetalLlama v1.0 - Ported to Cosmopolitan Libc           \033[1;33m┃\033[0m\n");
+    console::log("\033[1;33m┃\033[0m  Model: %-53s \033[1;33m┃\033[0m\n", inf.model_name.substr(0, 53).c_str());
+    console::log("\033[1;33m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\033[0m\n\n");
+
+    console::log("\033[2mType /exit or Ctrl+C to quit. /clear to reset history.\033[0m\n\n");
+
+    std::string cur_msg;
     while (true) {
-        ui.move(4, ui.chat_y + 1);
-        ui.color("1;35");
-        printf(" USER > ");
-        ui.color("0");
-
         std::string buffer;
+        console::set_display(DISPLAY_TYPE_USER_INPUT);
+        console::log("\033[1;35m> \033[0m\033[2mType your message...\033[0m\r\033[1;35m> \033[0m");
         std::string line;
         bool        another_line = console::readline(line, params.multiline_input);
         buffer += line;
@@ -337,6 +247,7 @@ static void run_tui(common_params & params, server_context & ctx_server) {
             another_line = console::readline(line, params.multiline_input);
             buffer += line;
         }
+        console::set_display(DISPLAY_TYPE_RESET);
 
         if (g_is_interrupted.load()) {
             g_is_interrupted.store(false);
@@ -350,7 +261,7 @@ static void run_tui(common_params & params, server_context & ctx_server) {
         }
         if (buffer == "/clear") {
             ctx_cli.messages.clear();
-            ui.draw_dashboard(last_timings);
+            console::log("History cleared.\n");
             continue;
         }
 
@@ -358,48 +269,15 @@ static void run_tui(common_params & params, server_context & ctx_server) {
             { "role",    "user" },
             { "content", buffer }
         });
-
-        // Assistant response
-        ui.move(4, ui.chat_y + 3);
-        ui.color("1;32");
-        printf(" MODEL > ");
-        ui.color("0");
-
         result_timings timings;
         std::string    assistant_content = ctx_cli.generate_completion(timings);
-        last_timings                     = timings;
-
         ctx_cli.messages.push_back({
             { "role",    "assistant"       },
             { "content", assistant_content }
         });
-
-        // Redraw dashboard to update tok/s
-        ui.draw_dashboard(last_timings);
-
-        // Print history in the chat box after redraw
-        int line_offset = 1;
-        for (const auto & msg : ctx_cli.messages) {
-            ui.move(4, ui.chat_y + line_offset);
-            std::string r = msg.at("role").get<std::string>();
-            if (r == "user") {
-                ui.color("1;35");
-            } else {
-                ui.color("1;32");
-            }
-            printf("%s: ", r.c_str());
-            ui.color("0");
-            std::string content = msg.at("content").get<std::string>();
-            if (content.length() > (size_t) (ui.term_cols - 15)) {
-                content = content.substr(0, ui.term_cols - 18) + "...";
-            }
-            printf("%s", content.c_str());
-            line_offset++;
-            if (line_offset >= 10) {
-                break;  // Simple cap for now
-            }
-        }
+        console::log("\n");
     }
+
     ctx_server.terminate();
     inference_thread.join();
     console::cleanup();
@@ -458,6 +336,10 @@ int main(int argc, char ** argv) {
     }
 
     bool tui_mode = (argc == 1 && is_bundle);
+
+    if (tui_mode) {
+        common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
+    }
 
     // validate batch size for embeddings
     // embeddings require all tokens to be processed in a single ubatch
