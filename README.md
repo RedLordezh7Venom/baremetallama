@@ -49,6 +49,26 @@ Pack a GGUF model into a standalone `.baremetallama` file:
 ./bundler/baremetallama.com llama-server.com your_model.gguf qwen.baremetallama
 ```
 
+---
+
+## 🐳 Quick Start with Docker (Recommended)
+
+If you don't want to install `cosmocc` locally, you can use Docker to bundle your models:
+
+### 1. Build the Image
+```bash
+docker build -t baremetallama .
+```
+
+### 2. Bundle a Model
+Mount your current directory to `/work` inside the container:
+```bash
+docker run -v $(pwd):/work baremetallama /work/model.gguf /work/output.baremetallama
+```
+*This command will output a `output.baremetallama` file in your local folder that works on any OS.*
+
+---
+
 ## 🖥️ Usage
 
 ### Windows
