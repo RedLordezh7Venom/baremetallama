@@ -1,0 +1,22 @@
+# Toolchain
+cosmocc/
+
+# Binaries
+*.com
+*.com.dbg
+*.baremetallama
+llama-server.aarch64.elf
+bundler/baremetallama.com
+bundler/baremetallama.com.dbg
+
+# Object files and logs
+*.o
+*.obj
+build.log
+.DS_Store
+
+# Models (GGUF etc)
+models/
+
+# Vendor build dirs
+vendor/llama.cpp/build/
