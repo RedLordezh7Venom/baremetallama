@@ -17,6 +17,7 @@ build.log
 
 # Models (GGUF etc)
 models/
+*.gguf
 
 # Vendor build dirs
 vendor/llama.cpp/build/
