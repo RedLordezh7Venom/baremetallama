@@ -24,26 +24,30 @@ mount -t iso9660 /dev/sr0 /mnt/iso || mount -t iso9660 /dev/cdrom /mnt/iso
 
 # Set environment
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export TERM=linux
+export TERM=xterm-256color
 export HOME=/root
 mkdir -p /root
 
-# The generic bundle contains [Executable (13959168 bytes)] + [Model Data]
-echo "PureBLM: Extracting AI Engine and Model..."
+echo "PureBLM: Preparing Aligned BareMetalLlama Engine..."
 BUNDLE="/mnt/iso/app/qwen2505b.baremetallama"
-OFFSET=13959168
+
+# Aligned Static Native ELF Offset
+ENGINE_SIZE=15459920
+MODEL_OFFSET=15462400
 
 if [ -f "$BUNDLE" ]; then
-    # Extract native ELF
-    head -c $OFFSET "$BUNDLE" > /tmp/llama-cli
-    chmod +x /tmp/llama-cli
+    # 1. Extract ONLY the engine
+    head -c $ENGINE_SIZE "$BUNDLE" > /tmp/baremetallama
+    chmod +x /tmp/baremetallama
     
-    # Extract GGUF Model
-    tail -c +$((OFFSET + 1)) "$BUNDLE" > /tmp/model.gguf
+    # 2. Set the Bundle Environment Variables
+    export BAREMETALLAMA_SOURCE="$BUNDLE"
+    export BAREMETALLAMA_OFFSET="$MODEL_OFFSET"
     
-    echo "PureBLM: Launching TUI..."
-    # Launch in conversation mode (Interactive TUI)
-    /tmp/llama-cli -m /tmp/model.gguf -cnv --color on -p "You are PureBLM, a bare-metal AI assistant." < /dev/console > /dev/console 2>&1
+    echo "PureBLM: Launching BareMetalLlama Dashboard..."
+    # Launch on the main console. 
+    # The isatty() patch in console.cpp will handle the rest.
+    /tmp/baremetallama < /dev/console > /dev/console 2>&1
     
     echo "AI Engine exited with code $?"
 else

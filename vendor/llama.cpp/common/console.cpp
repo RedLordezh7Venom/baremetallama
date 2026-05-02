@@ -132,17 +132,21 @@ void init(bool use_simple_io, bool use_advanced_display) {
 #else
     // POSIX-specific console initialization
     if (!simple_io) {
-        struct termios new_termios;
-        tcgetattr(STDIN_FILENO, &initial_state);
-        new_termios = initial_state;
-        new_termios.c_lflag &= ~(ICANON | ECHO);
-        new_termios.c_cc[VMIN]  = 1;
-        new_termios.c_cc[VTIME] = 0;
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
+        if (isatty(STDIN_FILENO)) {
+            struct termios new_termios;
+            tcgetattr(STDIN_FILENO, &initial_state);
+            new_termios = initial_state;
+            new_termios.c_lflag &= ~(ICANON | ECHO);
+            new_termios.c_cc[VMIN]  = 1;
+            new_termios.c_cc[VTIME] = 0;
+            tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
 
-        tty = fopen("/dev/tty", "w+");
-        if (tty != nullptr) {
-            out = tty;
+            tty = fopen("/dev/tty", "w+");
+            if (tty != nullptr) {
+                out = tty;
+            }
+        } else {
+            simple_io = true;
         }
     }
 
