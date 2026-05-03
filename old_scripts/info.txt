@@ -1,0 +1,2 @@
+make_pureblm.py: Old attempt to bundle GGUFs.
+simple_build.py: A stripped-down builder that couldn't handle the hardware video fixes.
