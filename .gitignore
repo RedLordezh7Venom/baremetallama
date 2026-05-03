@@ -21,3 +21,23 @@ models/
 
 # Vendor build dirs
 vendor/llama.cpp/build/
+# Large AI Models & Executables
+*.baremetallama
+*.elf
+*.gguf
+*.pureblm
+
+# Bootloader & Kernels
+bzImage
+vmlinuz-virt
+initramfs.img
+
+# Build Artifacts & Temp Files
+*.iso
+build/
+build_temp/
+pureblm2_build/
+pureblm2/temp/
+rootfs/
+tmpbin.bin
+buildlog1.txt
