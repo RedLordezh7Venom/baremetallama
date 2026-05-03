@@ -1,91 +1,97 @@
-Model used in tests and examples: `qwen2.5-0.5b-instruct_q4_K_M.gguf`
+<p align="center">
+<img src="./pureblm2_logo.png" width=40%>
+</p>
 
-**HuggingFace Repo**: [provetgrizzner/qwen-bundle](https://huggingface.co/provetgrizzner/qwen-bundle)
+<h1 align="center">PureBLM2</h1>
 
-# BareMetalLlama 🦙
+<p align="center">
+  <a href="https://github.com/RedLordezh7Venom/baremetallama/issues">
+    <img src="https://img.shields.io/github/issues/RedLordezh7Venom/baremetallama?style=flat-square" height="22" alt="Open Issues"/>
+  </a>
+    <a href="https://github.com/RedLordezh7Venom/baremetallama/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RedLordezh7Venom/baremetallama?style=flat-square" height="22" alt="License"/>
+  </a>
+  <a href="https://github.com/RedLordezh7Venom/baremetallama">
+    <img src="https://img.shields.io/github/languages/top/RedLordezh7Venom/baremetallama?style=flat-square" height="22" alt="Top language"/>
+  </a>
+  <a href="https://discord.gg/your-discord-link">
+    <img src="https://img.shields.io/badge/status-Alpha-orange?style=flat-square" height="22" alt="Project Status"/>
+  </a>
+</p>
 
-A universal, OS-agnostic AI model bundler and runner. Build single-file AI executables that run natively on Linux, Windows, and macOS without dependencies, using **Cosmopolitan Libc**.
+<h3 align="center">
+  <a href="PUREBLM2_EVOLUTION.md">Manifesto</a> &bull;
+  <a href="#install">Install</a> &bull;
+  <a href="#usage">Usage</a> &bull;
+  <a href="#vision">The Vision</a>
+</h3>
 
-## 🚀 Key Features
+**PureBLM2** is a high-performance **AI Unikernel** designed to run large language models directly on bare metal. By stripping away the traditional operating system, PureBLM2 creates an immutable, RAM-resident environment dedicated to a single task: **Inference.**
 
-- **Polyglot Binaries**: One file (`.baremetallama`) runs on Windows (as `.exe`), Linux, and macOS.
-- **Embedded Inference**: The engine and weights are fused into a single executable.
-- **Zero Dependencies**: No Python, no CUDA, no DLLs required on the target machine.
-- **Bare-Metal Vision**: Roadmap for `.pureblm`, a bootable RTOS runner that runs AI directly on hardware.
+---
 
-## 📂 Project Structure
+## 🧐 Description
+PureBLM2 is the first "Pure Bare Metal AI Runner." It eliminates the "OS Tax" (the CPU and RAM overhead of background services, desktop environments, and kernel bloat) to provide a zero-latency, air-gapped AI appliance experience.
 
-- `bundler/`: CLI tool to package models into `.baremetallama` files.
-- `vendor/llama.cpp/`: Modified Llama.cpp source for Cosmopolitan compatibility.
-- `Makefile.cosmo`: The primary build system for universal binaries.
-- `PUREBLM_ARCHITECTURE.md`: Technical roadmap for the bare-metal bootable runner.
-- `docs/diagrams.md`: Mermaid.js diagrams of the system architecture.
+### Why PureBLM2?
+- **Total Privacy**: An immutable system with no networking stack by default. What happens in RAM stays in RAM.
+- **Hardware Agnostic**: Boots on everything from 2015-era laptops to modern H100 server clusters.
+- **Zero Configuration**: No drivers to install, no Python environments to break. Just plug and play.
+- **Ultra-High Density**: 100% of your hardware is dedicated to token generation.
+- **Stateless Security**: Every reboot is a factory reset. No persistent OS malware can survive.
 
-## 🛠️ Build Instructions
+---
 
-### 1. Requirements
-You need the **Cosmocc** toolchain to compile universal binaries.
+## 🛠️ Install
+PureBLM2 requires a Linux host to build the bootable ISOs.
+
+### Prerequisites
+Install the following system tools:
 ```bash
-# Download and setup Cosmocc
-wget https://cosmo.zip/pub/cosmocc/cosmocc.zip
-unzip cosmocc.zip -d cosmocc/
-export PATH="$PWD/cosmocc/bin:$PATH"
+sudo apt update
+sudo apt install grub-common xorriso cpio gzip mtools
 ```
 
-### 2. Compile the AI Engine
-Use the custom Cosmopolitan Makefile to build the portable `llama-server.com`:
+### Clone the Repository
 ```bash
-make -f Makefile.cosmo -j$(nproc)
-```
-
-### 3. Compile the Bundler
-```bash
-cosmoc++ -O3 -mcosmo bundler/bundler.cpp -o bundler/baremetallama.com
-```
-
-### 4. Create your Universal AI
-Pack a GGUF model into a standalone `.baremetallama` file:
-```bash
-./bundler/baremetallama.com llama-server.com your_model.gguf qwen.baremetallama
+git clone https://github.com/RedLordezh7Venom/baremetallama.git
+cd baremetallama
 ```
 
 ---
 
-## 🐳 Quick Start with Docker (Recommended)
+## 🚀 Usage
 
-If you don't want to install `cosmocc` locally, you can use Docker to bundle your models:
-
-### 1. Build the Image
+### 1. Build the AI ISO
+Use the Python builder to convert your AI model into a bootable "Neural Drive."
 ```bash
-docker build -t baremetallama .
+python3 pureblm2/builder.py qwen2505b.elf -o my_ai.iso
 ```
 
-### 2. Bundle a Model
-Mount your current directory to `/work` inside the container:
+### 2. Flash to USB
+Identify your USB drive (e.g., `/dev/sdb`) and flash the ISO.
 ```bash
-docker run -v $(pwd):/work baremetallama /work/model.gguf /work/output.baremetallama
+sudo dd if=my_ai.iso of=/dev/sdb status=progress && sync
 ```
-*This command will output a `output.baremetallama` file in your local folder that works on any OS.*
+
+### 3. Boot the Hardware
+Plug the USB into your target laptop or server, disable **Secure Boot** in the BIOS, and boot from the drive. You will reach the AI chat prompt in seconds.
 
 ---
 
-## 🖥️ Usage
+## 🌐 The Vision: Pure Bare Metal AI Runner
+Beyond personal use, PureBLM2 is built for the next generation of AI data centers.
 
-### Windows
-Rename to `.exe` or run directly from CMD/PowerShell:
-```powershell
-.\qwen.baremetallama
-```
-
-### Linux / macOS
-```bash
-chmod +x qwen.baremetallama
-./qwen.baremetallama
-```
-
-*By default, running the bundle without arguments launches an interactive **Chat TUI** in your terminal.*
+- **Plug-and-Play Clusters**: Turn a rack of servers into an inference cluster by simply booting them from a PureBLM2 image.
+- **Instant Scaling**: Add a new node by plugging in a USB or PXE booting.
+- **Immutable Infrastructure**: No local disks to manage, no OS updates to deploy. Update the boot image, and the entire cluster is upgraded on the next reboot.
 
 ---
-**Repository**: [RedLordezh7Venom/baremetallama](https://github.com/RedLordezh7Venom/baremetallama)  
-**TUI Engine**: Modified `llama-server` (Llama.cpp)  
-**Runtime**: Cosmopolitan Libc
+
+## 📖 Documentation
+For a deep dive into how we solved kernel panics, hardware video handover, and the evolution of the project, see the [PUREBLM2_EVOLUTION.md](PUREBLM2_EVOLUTION.md).
+
+## 🤝 Contributors
+Open to contributors who want to push the boundaries of bare-metal AI.
+
+---
+<p align="center"><i>"AI without the OS Tax."</i></p>
