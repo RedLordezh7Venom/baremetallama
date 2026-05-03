@@ -1,8 +1,15 @@
 # 🚀 PureBLM2: The Evolution of Bare-Metal AI
 
-> **Classification**: *AI Unikernel / Just-Enough OS (JeOS) / Bare-Metal Appliance*
+> **Classification**: *AI Unikernel / Just-Enough OS (JeOS) / Pure Bare Metal AI Runner*
 
-## 1. The Genesis (How it Happened)
+## 1. The Vision: Pure Bare Metal AI Runner
+Beyond personal laptops, PureBLM2 is designed to disrupt the AI server space. Traditional AI servers waste significant power and memory running complex Linux distributions, hypervisors, and container orchestration layers. PureBLM2 turns the server into a "Pure AI Appliance."
+
+*   **Plug-and-Play Clusters**: Imagine a server rack where you don't install an OS. You simply PXE boot or plug in a "Neural Drive," and the server instantly becomes a dedicated inference node.
+*   **Stateless Infrastructure**: Because the system runs entirely in RAM, the hardware has no persistent state. This makes it immune to "rootkits" or persistent OS-level malware.
+*   **Zero Overhead Density**: By removing `systemd`, `docker`, and `ssh` daemons, 100% of the server's interconnect bandwidth and CPU cycles are dedicated to weight loading and token generation.
+
+## 2. The Genesis (How it Happened)
 PureBLM2 was born out of a series of technical "dead ends" while trying to run large language models directly on hardware without a traditional operating system. 
 
 ### The Trial by Fire:
